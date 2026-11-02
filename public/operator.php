@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require __DIR__ . '/../src/queue.php';
 
+require_operator();
+
 $window = max(1, min(WINDOWS_COUNT, (int) ($_GET['w'] ?? 1)));
 $message = null;
 

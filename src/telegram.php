@@ -22,6 +22,12 @@ function tg_call(string $method, array $params = [], int $timeout = 10): ?array
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT        => $timeout,
     ]);
+
+    $proxy = getenv('TG_PROXY') ?: '';
+    if ($proxy !== '') {
+        curl_setopt($ch, CURLOPT_PROXY, $proxy);
+    }
+
     $raw = curl_exec($ch);
     if ($raw === false) {
         $error = curl_error($ch);
@@ -37,7 +43,7 @@ function tg_call(string $method, array $params = [], int $timeout = 10): ?array
     return $data;
 }
 
-function tg_send(int $chatId, string $text, ?array $keyboard = null): void
+function tg_send(int $chatId, string $text, ?array $keyboard = null, int $timeout = 10): void
 {
     $params = [
         'chat_id'    => $chatId,
@@ -47,7 +53,7 @@ function tg_send(int $chatId, string $text, ?array $keyboard = null): void
     if ($keyboard !== null) {
         $params['reply_markup'] = $keyboard;
     }
-    tg_call('sendMessage', $params);
+    tg_call('sendMessage', $params, $timeout);
 }
 
 /** Сообщение клиенту, когда оператор вызвал его талон. Ошибки не ломают панель оператора. */
@@ -60,7 +66,9 @@ function notify_ticket_called(array $ticket): void
         tg_send(
             (int) $ticket['chat_id'],
             '🔔 <b>Ваш талон ' . htmlspecialchars((string) $ticket['code'], ENT_QUOTES, 'UTF-8') . '</b>' . "\n"
-            . 'Пройдите к окну № <b>' . (int) $ticket['window_no'] . '</b>'
+            . 'Пройдите к окну № <b>' . (int) $ticket['window_no'] . '</b>',
+            null,
+            4 // не задерживаем панель оператора, если Telegram тормозит
         );
     } catch (Throwable $e) {
         error_log('notify_ticket_called: ' . $e->getMessage());

@@ -88,6 +88,16 @@ function handle_action(int $chatId, string $action): void
     }
 }
 
+/** Чат, из которого пришло обновление (для ответа об ошибке). */
+function update_chat_id(array $update): ?int
+{
+    $id = $update['callback_query']['message']['chat']['id']
+        ?? $update['callback_query']['from']['id']
+        ?? $update['message']['chat']['id']
+        ?? null;
+    return $id === null ? null : (int) $id;
+}
+
 function handle_update(array $update): void
 {
     if (isset($update['callback_query'])) {
@@ -97,7 +107,10 @@ function handle_update(array $update): void
         } catch (Throwable $e) {
             // не критично: просто пропадёт «часики» на кнопке
         }
-        handle_action((int) $cb['message']['chat']['id'], (string) ($cb['data'] ?? ''));
+        $chatId = (int) ($cb['message']['chat']['id'] ?? $cb['from']['id'] ?? 0);
+        if ($chatId !== 0) {
+            handle_action($chatId, (string) ($cb['data'] ?? ''));
+        }
         return;
     }
 
@@ -118,7 +131,15 @@ function handle_update(array $update): void
 }
 
 // Long polling и webhook взаимоисключающие
-tg_call('deleteWebhook');
+while (true) {
+    try {
+        tg_call('deleteWebhook');
+        break;
+    } catch (Throwable $e) {
+        error_log('Telegram недоступен, повтор через 5 с: ' . $e->getMessage());
+        sleep(5);
+    }
+}
 fwrite(STDOUT, "Бот запущен (long polling)\n");
 
 $offset = 0;
@@ -141,6 +162,15 @@ while (true) {
                 }
             } catch (Throwable $e) {
                 error_log('update ' . $update['update_id'] . ': ' . $e->getMessage());
+                // Пользователь не должен оставаться без ответа
+                $chatId = update_chat_id($update);
+                if ($chatId !== null) {
+                    try {
+                        tg_send($chatId, '⚠️ Не получилось выполнить действие. Попробуйте ещё раз или отправьте /start.');
+                    } catch (Throwable) {
+                        // Telegram недоступен — ответить нечем
+                    }
+                }
             }
         }
     } catch (Throwable $e) {

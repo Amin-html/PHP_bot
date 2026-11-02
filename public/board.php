@@ -7,9 +7,8 @@ require __DIR__ . '/../src/queue.php';
 $called = called_tickets();
 $waiting = waiting_tickets(8);
 
-page_header('Табло', 'board', true);
+page_header('Табло', 'board', true, 5);
 ?>
-<meta http-equiv="refresh" content="5">
 <div class="row g-4">
     <div class="col-lg-8">
         <h1 class="h3 mb-3">Вызываются</h1>

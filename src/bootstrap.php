@@ -7,6 +7,10 @@ date_default_timezone_set('Asia/Bishkek');
 const WINDOWS_COUNT = 5;
 
 if (PHP_SAPI !== 'cli' && session_status() === PHP_SESSION_NONE) {
+    session_set_cookie_params([
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
     session_start();
 }
 
@@ -57,7 +61,37 @@ function csrf_check(): void
     }
 }
 
-function page_header(string $title, string $active = '', bool $dark = false): void
+/** Пароль оператора не задан в .env — панель открыта (режим разработки). */
+function operator_auth_enabled(): bool
+{
+    return (getenv('OPERATOR_PASSWORD') ?: '') !== '';
+}
+
+function operator_logged_in(): bool
+{
+    return !operator_auth_enabled() || !empty($_SESSION['operator']);
+}
+
+/** Закрывает страницу для неавторизованных: редирект на форму входа. */
+function require_operator(): void
+{
+    if (!operator_logged_in()) {
+        header('Location: /login.php');
+        exit;
+    }
+}
+
+function operator_login(string $password): bool
+{
+    if (!hash_equals((string) getenv('OPERATOR_PASSWORD'), $password)) {
+        return false;
+    }
+    session_regenerate_id(true);
+    $_SESSION['operator'] = true;
+    return true;
+}
+
+function page_header(string $title, string $active = '', bool $dark = false, int $refresh = 0): void
 {
     $links = [
         'client'   => ['/', 'Клиент'],
@@ -70,6 +104,9 @@ function page_header(string $title, string $active = '', bool $dark = false): vo
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?php if ($refresh > 0): ?>
+    <meta http-equiv="refresh" content="<?= $refresh ?>">
+    <?php endif; ?>
     <title><?= h($title) ?> — Электронная очередь</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
@@ -81,6 +118,9 @@ function page_header(string $title, string $active = '', bool $dark = false): vo
             <?php foreach ($links as $key => [$url, $label]): ?>
                 <a class="nav-link <?= $key === $active ? 'active fw-bold' : '' ?>" href="<?= $url ?>"><?= $label ?></a>
             <?php endforeach; ?>
+            <?php if (operator_auth_enabled() && operator_logged_in()): ?>
+                <a class="nav-link" href="/logout.php">Выйти</a>
+            <?php endif; ?>
         </div>
     </div>
 </nav>
