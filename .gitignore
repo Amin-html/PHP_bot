@@ -1,0 +1,25 @@
+# Секреты
+.env
+.env.*
+!.env.example
+
+# Зависимости
+vendor/
+node_modules/
+
+# Логи
+storage/logs/*
+!storage/logs/.gitkeep
+*.log
+
+# Временные файлы
+tmp/
+*.tmp
+*.swp
+*.bak
+
+# IDE и ОС
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
