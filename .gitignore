@@ -23,3 +23,5 @@ tmp/
 .vscode/
 .DS_Store
 Thumbs.db
+# Мусор Windows (случайный вывод в NUL)
+NUL
