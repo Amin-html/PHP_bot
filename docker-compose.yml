@@ -1,11 +1,27 @@
 services:
   app:
+    image: electronic-queue-php
     build:
       context: .
       dockerfile: Dockerfile
     container_name: queue_app
     ports:
       - "8080:80"
+    env_file:
+      - .env
+    volumes:
+      - ./:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - queue_net
+    restart: unless-stopped
+
+  bot:
+    image: electronic-queue-php
+    container_name: queue_bot
+    command: ["php", "/var/www/html/bot/poll.php"]
     env_file:
       - .env
     volumes:

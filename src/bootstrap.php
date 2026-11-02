@@ -6,7 +6,7 @@ date_default_timezone_set('Asia/Bishkek');
 
 const WINDOWS_COUNT = 5;
 
-if (session_status() === PHP_SESSION_NONE) {
+if (PHP_SAPI !== 'cli' && session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 

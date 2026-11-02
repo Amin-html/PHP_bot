@@ -12,7 +12,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
         $action = $_POST['action'] ?? '';
         if ($action === 'next') {
-            $_SESSION['flash'] = call_next($window) ? null : 'Очередь пуста';
+            $called = call_next($window);
+            $_SESSION['flash'] = $called ? null : 'Очередь пуста';
+            if ($called) {
+                notify_ticket_called($called);
+            }
         } elseif ($action === 'done') {
             finish_current($window, 'done');
         } elseif ($action === 'skip') {

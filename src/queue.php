@@ -3,8 +3,9 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/telegram.php';
 
-function create_ticket(int $serviceId): int
+function create_ticket(int $serviceId, ?int $chatId = null): int
 {
     $pdo = db();
     $pdo->beginTransaction();
@@ -24,8 +25,8 @@ function create_ticket(int $serviceId): int
         $number = (int) $stmt->fetchColumn();
         $code = $service['prefix'] . str_pad((string) $number, 3, '0', STR_PAD_LEFT);
 
-        $stmt = $pdo->prepare('INSERT INTO tickets (service_id, ticket_date, number, code) VALUES (?, ?, ?, ?)');
-        $stmt->execute([$serviceId, $today, $number, $code]);
+        $stmt = $pdo->prepare('INSERT INTO tickets (service_id, ticket_date, number, code, chat_id) VALUES (?, ?, ?, ?, ?)');
+        $stmt->execute([$serviceId, $today, $number, $code, $chatId]);
         $id = (int) $pdo->lastInsertId();
 
         $pdo->commit();
@@ -141,4 +142,23 @@ function called_tickets(): array
     );
     $stmt->execute([date('Y-m-d')]);
     return $stmt->fetchAll();
+}
+function active_ticket_for_chat(int $chatId): ?array
+{
+    $stmt = db()->prepare(
+        "SELECT t.*, s.name AS service_name FROM tickets t JOIN services s ON s.id = t.service_id
+         WHERE t.chat_id = ? AND t.ticket_date = ? AND t.status IN ('waiting', 'called')
+         ORDER BY t.id DESC LIMIT 1"
+    );
+    $stmt->execute([$chatId, date('Y-m-d')]);
+    return $stmt->fetch() ?: null;
+}
+
+function cancel_ticket(int $id): bool
+{
+    $stmt = db()->prepare(
+        "UPDATE tickets SET status = 'cancelled', finished_at = NOW() WHERE id = ? AND status = 'waiting'"
+    );
+    $stmt->execute([$id]);
+    return $stmt->rowCount() > 0;
 }
