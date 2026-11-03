@@ -94,13 +94,13 @@ function operator_login(string $password): bool
 function page_header(string $title, string $active = '', bool $dark = false, int $refresh = 0): void
 {
     $links = [
-        if (operator_logged_in()) {
-        $links['stats'] = ['/stats.php', 'Статистика'];
-    }
         'client'   => ['/', 'Клиент'],
         'operator' => ['/operator.php', 'Оператор'],
         'board'    => ['/board.php', 'Табло'],
     ];
+    if (operator_logged_in()) {
+        $links['stats'] = ['/stats.php', 'Статистика'];
+    }
     ?>
 <!DOCTYPE html>
 <html lang="ru" data-bs-theme="<?= $dark ? 'dark' : 'light' ?>">
