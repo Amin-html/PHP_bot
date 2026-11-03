@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
+// Добавляет поля notified_soon и rating. Можно запускать повторно.
 require __DIR__ . '/../src/bootstrap.php';
 
 $pdo = db();
+$columns = [
+    'notified_soon' => 'TINYINT(1) NOT NULL DEFAULT 0 AFTER chat_id',
+    'rating'        => 'TINYINT UNSIGNED NULL AFTER notified_soon',
+];
 
-$sql = file_get_contents(__DIR__ . '/schema.sql');
-foreach (array_filter(array_map('trim', explode(';', $sql))) as $statement) {
-    $pdo->exec($statement);
-}
+$exists = $pdo->prepare(
+    "SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tickets' AND COLUMN_NAME = ?"
+);
 
-if ((int) $pdo->query('SELECT COUNT(*) FROM services')->fetchColumn() === 0) {
-    $insert = $pdo->prepare('INSERT INTO services (name, prefix) VALUES (?, ?)');
-    foreach ([
-        ['Консультация', 'A'],
-        ['Оформление документов', 'B'],
-        ['Оплата', 'C'],
-        ['Получение результата', 'D'],
-    ] as [$name, $prefix]) {
-        $insert->execute([$name, $prefix]);
+foreach ($columns as $name => $definition) {
+    $exists->execute([$name]);
+    if ((int) $exists->fetchColumn() === 0) {
+        $pdo->exec("ALTER TABLE tickets ADD COLUMN {$name} {$definition}");
+        echo "Добавлено поле {$name}\n";
     }
 }
-
 echo "Миграция выполнена\n";

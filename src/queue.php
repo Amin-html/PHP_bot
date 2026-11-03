@@ -55,16 +55,20 @@ function people_ahead(array $ticket): int
     return (int) $stmt->fetchColumn();
 }
 
-function finish_current(int $window, string $status): void
+function finish_current(int $window, string $status): ?array
 {
     if (!in_array($status, ['done', 'skipped'], true)) {
         throw new InvalidArgumentException('Неверный статус');
     }
+    $ticket = current_ticket($window);
+    if (!$ticket) {
+        return null;
+    }
     $stmt = db()->prepare(
-        "UPDATE tickets SET status = ?, finished_at = NOW()
-         WHERE window_no = ? AND status = 'called' AND ticket_date = ?"
+        "UPDATE tickets SET status = ?, finished_at = NOW() WHERE id = ? AND status = 'called'"
     );
-    $stmt->execute([$status, $window, date('Y-m-d')]);
+    $stmt->execute([$status, $ticket['id']]);
+    return $stmt->rowCount() > 0 ? $ticket : null;
 }
 
 function call_next(int $window): ?array
@@ -160,5 +164,90 @@ function cancel_ticket(int $id): bool
         "UPDATE tickets SET status = 'cancelled', finished_at = NOW() WHERE id = ? AND status = 'waiting'"
     );
     $stmt->execute([$id]);
+    return $stmt->rowCount() > 0;
+}
+
+
+
+// ---------- Уведомления, ожидание, оценки ----------
+
+const SOON_THRESHOLD = 2;            // «скоро ваша очередь», когда впереди <= 2
+const DEFAULT_SERVICE_SECONDS = 300; // если истории обслуживания ещё нет
+
+/** Среднее время обслуживания за последние 7 дней (в секундах). */
+function avg_service_seconds(): int
+{
+    $stmt = db()->prepare(
+        "SELECT AVG(TIMESTAMPDIFF(SECOND, called_at, finished_at)) FROM tickets
+         WHERE status = 'done' AND called_at IS NOT NULL AND finished_at IS NOT NULL
+           AND ticket_date >= ?"
+    );
+    $stmt->execute([date('Y-m-d', strtotime('-7 days'))]);
+    $avg = $stmt->fetchColumn();
+    if ($avg === false || $avg === null) {
+        return DEFAULT_SERVICE_SECONDS;
+    }
+    return max(60, min(1800, (int) round((float) $avg))); // отсекаем выбросы
+}
+
+/** Сколько окон сегодня реально работало. */
+function active_windows(): int
+{
+    $stmt = db()->prepare(
+        'SELECT COUNT(DISTINCT window_no) FROM tickets WHERE ticket_date = ? AND window_no IS NOT NULL'
+    );
+    $stmt->execute([date('Y-m-d')]);
+    return max(1, (int) $stmt->fetchColumn());
+}
+
+/** Примерное ожидание в минутах для клиента, перед которым $ahead человек. */
+function estimate_wait_minutes(int $ahead): int
+{
+    if ($ahead <= 0) {
+        return 0;
+    }
+    return max(1, (int) round($ahead * avg_service_seconds() / active_windows() / 60));
+}
+
+function mark_soon_notified(int $ticketId): void
+{
+    db()->prepare('UPDATE tickets SET notified_soon = 1 WHERE id = ?')->execute([$ticketId]);
+}
+
+/** Пишет тем, у кого впереди осталось <= SOON_THRESHOLD человек (один раз на талон). */
+function notify_queue_progress(): void
+{
+    $stmt = db()->prepare(
+        "SELECT id, code, chat_id, notified_soon FROM tickets
+         WHERE status = 'waiting' AND ticket_date = ? ORDER BY id LIMIT " . (SOON_THRESHOLD + 1)
+    );
+    $stmt->execute([date('Y-m-d')]);
+
+    // ключ строки = сколько человек впереди
+    foreach ($stmt->fetchAll() as $ahead => $t) {
+        if (empty($t['chat_id']) || (int) $t['notified_soon'] === 1) {
+            continue;
+        }
+        $text = '⏳ <b>Скоро ваша очередь</b> — талон ' . tg_esc((string) $t['code']) . "\n"
+            . ($ahead === 0
+                ? 'Вы следующий! Подойдите к окнам.'
+                : 'Перед вами: <b>' . $ahead . '</b> (≈ ' . estimate_wait_minutes($ahead) . ' мин). Приготовьтесь.');
+        if (tg_notify((int) $t['chat_id'], $text)) {
+            mark_soon_notified((int) $t['id']);
+        }
+    }
+}
+
+/** Сохраняет оценку 1–5 (только владелец талона, только обслуженный, только один раз). */
+function rate_ticket(int $ticketId, int $chatId, int $rating): bool
+{
+    if ($rating < 1 || $rating > 5) {
+        return false;
+    }
+    $stmt = db()->prepare(
+        "UPDATE tickets SET rating = ?
+         WHERE id = ? AND chat_id = ? AND status = 'done' AND rating IS NULL"
+    );
+    $stmt->execute([$rating, $ticketId, $chatId]);
     return $stmt->rowCount() > 0;
 }

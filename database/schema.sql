@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS tickets (
     status ENUM('waiting','called','done','skipped','cancelled') NOT NULL DEFAULT 'waiting',
     window_no TINYINT UNSIGNED NULL,
     chat_id BIGINT NULL,
+    notified_soon TINYINT(1) NOT NULL DEFAULT 0,
+    rating TINYINT UNSIGNED NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     called_at DATETIME NULL,
     finished_at DATETIME NULL,
